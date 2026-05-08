@@ -30,6 +30,12 @@ title: "Đọc file"
     <div class="reader-meta">
       <strong id="file-name" class="pdf-name"></strong>
       <span id="file-info" class="pdf-pages"></span>
+      <button id="btn-summarize" class="summarize-btn" disabled>✨ Tóm tắt AI</button>
+    </div>
+
+    <div id="ai-status" class="ai-status hidden">
+      <span class="ai-spinner"></span>
+      <span id="ai-status-text">Claude đang tóm tắt…</span>
     </div>
 
     <div class="tts-bar">
@@ -261,17 +267,71 @@ async function handleFile(file) {
       ? await parsePDF(buffer)
       : await parsePPTX(buffer);
 
+    currentFilename = file.name;
     fileName.textContent = file.name;
     fileInfo.textContent = info;
     fileContent.appendChild(fragment);
     progressBar.classList.add('hidden');
-    btnPlay.disabled = false;           // enable play only after content is ready
+    btnPlay.disabled      = false;
+    btnSummarize.disabled = false;
     readerSection.classList.remove('hidden');
     readerSection.scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
     showError(`❌ Không đọc được file: ${err.message}`);
   }
 }
+
+// ── AI Summarize ──
+const btnSummarize = document.getElementById('btn-summarize');
+const aiStatus     = document.getElementById('ai-status');
+const aiStatusText = document.getElementById('ai-status-text');
+let currentFilename = '';
+
+btnSummarize.addEventListener('click', async () => {
+  const allText = Array.from(fileContent.querySelectorAll('p'))
+    .map(el => el.textContent.trim())
+    .filter(Boolean)
+    .join('\n');
+
+  if (!allText) return;
+
+  btnSummarize.disabled = true;
+  btnPlay.disabled = true;
+  speechSynthesis.cancel();
+  playing = false;
+  aiStatus.classList.remove('hidden');
+  aiStatusText.textContent = 'Claude đang tóm tắt…';
+
+  try {
+    const res = await fetch('/api/summarize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: allText, filename: currentFilename }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    // replace content with summary paragraphs
+    fileContent.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    data.summary.split(/\n+/).forEach(line => {
+      if (!line.trim()) return;
+      const p = document.createElement('p');
+      p.textContent = line.trim();
+      frag.appendChild(p);
+    });
+    fileContent.appendChild(frag);
+    fileInfo.textContent += ' · AI tóm tắt';
+    aiStatusText.textContent = '✓ Tóm tắt xong';
+    setTimeout(() => aiStatus.classList.add('hidden'), 2000);
+  } catch (err) {
+    aiStatusText.textContent = `❌ ${err.message}`;
+    setTimeout(() => aiStatus.classList.add('hidden'), 4000);
+  } finally {
+    btnPlay.disabled = false;
+    btnSummarize.disabled = false;
+  }
+});
 
 // ── File input & drag-drop ──
 input.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
