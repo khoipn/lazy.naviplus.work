@@ -234,12 +234,24 @@ main {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: .65rem;
+  gap: .5rem;
   padding: 2rem 1rem;
   color: var(--text-muted);
   font-size: .95rem;
 }
 .drop-inner svg { opacity: .45; }
+.drop-hint { font-size: .8rem; opacity: .7; }
+
+.error-box {
+  background: #fff0f0;
+  border: 1px solid #f5c6c6;
+  color: #b91c1c;
+  border-radius: var(--radius);
+  padding: .85rem 1rem;
+  font-size: .9rem;
+  margin-bottom: 1rem;
+}
+.error-box.hidden { display: none; }
 
 .progress-bar {
   position: relative;
