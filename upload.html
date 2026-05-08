@@ -1,0 +1,267 @@
+---
+layout: default
+title: "Đọc file PDF"
+---
+<section class="upload-page">
+
+  <div class="upload-header">
+    <a href="{{ '/' | relative_url }}" class="back-link">← Danh sách</a>
+    <h1>Đọc file PDF</h1>
+    <p class="subtitle">Chọn file PDF từ máy — toàn bộ xử lý trên trình duyệt, không upload lên server.</p>
+  </div>
+
+  <label id="drop-zone" class="drop-zone">
+    <input type="file" id="pdf-input" accept=".pdf" hidden />
+    <div class="drop-inner">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      <span id="drop-label">Bấm để chọn file PDF</span>
+    </div>
+  </label>
+
+  <div id="progress-bar" class="progress-bar hidden">
+    <div id="progress-fill" class="progress-fill"></div>
+    <span id="progress-text" class="progress-text">Đang đọc…</span>
+  </div>
+
+  <div id="reader-section" class="reader-section hidden">
+    <div class="reader-meta">
+      <strong id="pdf-name" class="pdf-name"></strong>
+      <span id="pdf-pages" class="pdf-pages"></span>
+    </div>
+
+    <div class="tts-bar">
+      <button id="btn-play" class="tts-btn tts-play">▶ Phát</button>
+      <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
+      <button id="btn-stop" class="tts-btn tts-stop" disabled>⏹ Tắt</button>
+      <div class="tts-speed">
+        <button class="speed-btn" data-rate="0.9">0.9×</button>
+        <button class="speed-btn active" data-rate="1.05">1.0×</button>
+        <button class="speed-btn" data-rate="1.25">1.25×</button>
+        <button class="speed-btn" data-rate="1.5">1.5×</button>
+      </div>
+      <span id="tts-status" class="tts-status"></span>
+    </div>
+
+    <div id="pdf-content" class="post-content pdf-content"></div>
+  </div>
+
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script type="module">
+import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
+
+// ── DOM refs ──
+const input        = document.getElementById('pdf-input');
+const dropZone     = document.getElementById('drop-zone');
+const dropLabel    = document.getElementById('drop-label');
+const progressBar  = document.getElementById('progress-bar');
+const progressFill = document.getElementById('progress-fill');
+const progressText = document.getElementById('progress-text');
+const readerSection= document.getElementById('reader-section');
+const pdfName      = document.getElementById('pdf-name');
+const pdfPages     = document.getElementById('pdf-pages');
+const pdfContent   = document.getElementById('pdf-content');
+const btnPlay      = document.getElementById('btn-play');
+const btnPause     = document.getElementById('btn-pause');
+const btnStop      = document.getElementById('btn-stop');
+const statusEl     = document.getElementById('tts-status');
+const speedBtns    = document.querySelectorAll('.speed-btn');
+
+// ── TTS state ──
+let rate    = 1.05;
+let chunks  = [];
+let index   = 0;
+let paused  = false;
+let playing = false;
+let viVoice = null;
+
+function loadVoice() {
+  const voices = speechSynthesis.getVoices();
+  viVoice =
+    voices.find(v => v.name.includes('Google') && v.lang.startsWith('vi')) ||
+    voices.find(v => v.lang === 'vi-VN') ||
+    voices.find(v => v.lang.startsWith('vi')) ||
+    null;
+}
+loadVoice();
+speechSynthesis.addEventListener('voiceschanged', loadVoice);
+
+// ── PDF loading ──
+async function loadPDF(file) {
+  dropLabel.textContent = file.name;
+  progressBar.classList.remove('hidden');
+  readerSection.classList.add('hidden');
+  pdfContent.innerHTML = '';
+  speechSynthesis.cancel();
+  playing = false;
+
+  const buffer = await file.arrayBuffer();
+  const pdf    = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const total  = pdf.numPages;
+
+  pdfName.textContent  = file.name;
+  pdfPages.textContent = `${total} trang`;
+
+  const fragment = document.createDocumentFragment();
+  for (let i = 1; i <= total; i++) {
+    const percent = Math.round((i / total) * 100);
+    progressFill.style.width = percent + '%';
+    progressText.textContent = `Đang xử lý trang ${i}/${total}…`;
+
+    const page    = await pdf.getPage(i);
+    const content = await page.getTextContent();
+
+    // group items into lines by y-position, then join lines into paragraphs
+    const lines = groupIntoLines(content.items);
+    const paras = groupIntoParagraphs(lines);
+
+    if (total > 1) {
+      const pageLabel = document.createElement('p');
+      pageLabel.className = 'page-label';
+      pageLabel.textContent = `— Trang ${i} —`;
+      fragment.appendChild(pageLabel);
+    }
+    paras.forEach(text => {
+      if (!text.trim()) return;
+      const p = document.createElement('p');
+      p.textContent = text;
+      fragment.appendChild(p);
+    });
+  }
+
+  pdfContent.appendChild(fragment);
+  progressBar.classList.add('hidden');
+  readerSection.classList.remove('hidden');
+  readerSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+function groupIntoLines(items) {
+  const rows = {};
+  for (const item of items) {
+    const y = Math.round(item.transform[5]);
+    if (!rows[y]) rows[y] = [];
+    rows[y].push(item.str);
+  }
+  return Object.keys(rows)
+    .sort((a, b) => b - a)
+    .map(y => rows[y].join(' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function groupIntoParagraphs(lines) {
+  const paras = [];
+  let current = [];
+  for (const line of lines) {
+    if (line.length < 40 && current.length > 0) {
+      paras.push(current.join(' '));
+      current = [line];
+    } else {
+      current.push(line);
+    }
+  }
+  if (current.length) paras.push(current.join(' '));
+  return paras;
+}
+
+// ── File input & drag-drop ──
+input.addEventListener('change', e => {
+  if (e.target.files[0]) loadPDF(e.target.files[0]);
+});
+
+dropZone.addEventListener('dragover', e => {
+  e.preventDefault();
+  dropZone.classList.add('drag-over');
+});
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file?.type === 'application/pdf') loadPDF(file);
+});
+
+// ── TTS ──
+function buildChunks() {
+  return Array.from(pdfContent.querySelectorAll('p'))
+    .map(el => ({ el, text: el.textContent.trim() }))
+    .filter(c => c.text.length > 0);
+}
+
+function highlight(el) {
+  pdfContent.querySelectorAll('.reading').forEach(e => e.classList.remove('reading'));
+  if (el) {
+    el.classList.add('reading');
+    el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+}
+
+function speakChunk(i) {
+  if (i >= chunks.length) { onDone(); return; }
+  const { el, text } = chunks[i];
+  highlight(el);
+
+  const u   = new SpeechSynthesisUtterance(text);
+  u.lang    = 'vi-VN';
+  u.rate    = rate;
+  u.pitch   = 1.0;
+  if (viVoice) u.voice = viVoice;
+
+  u.onend   = () => { if (playing && !paused) speakChunk(i + 1); };
+  u.onerror = (e) => { if (e.error !== 'interrupted') speakChunk(i + 1); };
+  index = i;
+  speechSynthesis.speak(u);
+}
+
+function onDone() {
+  playing = paused = false;
+  highlight(null);
+  statusEl.textContent   = '';
+  btnPlay.disabled       = false;
+  btnPause.disabled      = true;
+  btnStop.disabled       = true;
+  btnPause.textContent   = '⏸ Dừng';
+}
+
+btnPlay.addEventListener('click', () => {
+  speechSynthesis.cancel();
+  paused  = false;
+  playing = true;
+  chunks  = buildChunks();
+  btnPlay.disabled  = true;
+  btnPause.disabled = false;
+  btnStop.disabled  = false;
+  statusEl.textContent = '▶ Đang đọc…';
+  speakChunk(0);
+});
+
+btnPause.addEventListener('click', () => {
+  if (!paused) {
+    speechSynthesis.pause();
+    paused = true;
+    statusEl.textContent   = '⏸ Tạm dừng';
+    btnPause.textContent   = '▶ Tiếp';
+  } else {
+    speechSynthesis.resume();
+    paused = false;
+    statusEl.textContent   = '▶ Đang đọc…';
+    btnPause.textContent   = '⏸ Dừng';
+  }
+});
+
+btnStop.addEventListener('click', () => {
+  playing = false;
+  speechSynthesis.cancel();
+  onDone();
+});
+
+speedBtns.forEach(btn => {
+  btn.addEventListener('click', () => {
+    rate = parseFloat(btn.dataset.rate);
+    speedBtns.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+  });
+});
+</script>

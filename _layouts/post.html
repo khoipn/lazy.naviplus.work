@@ -9,9 +9,15 @@ layout: default
   </div>
 
   <div class="tts-bar">
-    <button id="btn-play" class="tts-btn tts-play" title="Phát">▶ Phát</button>
-    <button id="btn-pause" class="tts-btn tts-pause" title="Tạm dừng" disabled>⏸ Dừng</button>
-    <button id="btn-stop" class="tts-btn tts-stop" title="Dừng hẳn" disabled>⏹ Tắt</button>
+    <button id="btn-play" class="tts-btn tts-play">▶ Phát</button>
+    <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
+    <button id="btn-stop" class="tts-btn tts-stop" disabled>⏹ Tắt</button>
+    <div class="tts-speed">
+      <button class="speed-btn" data-rate="0.9">0.9×</button>
+      <button class="speed-btn active" data-rate="1.05">1.0×</button>
+      <button class="speed-btn" data-rate="1.25">1.25×</button>
+      <button class="speed-btn" data-rate="1.5">1.5×</button>
+    </div>
     <span id="tts-status" class="tts-status"></span>
   </div>
 
@@ -22,70 +28,133 @@ layout: default
 
 <script>
 (function () {
-  const rawText = document.getElementById('post-content').innerText;
-  const btnPlay  = document.getElementById('btn-play');
-  const btnPause = document.getElementById('btn-pause');
-  const btnStop  = document.getElementById('btn-stop');
-  const status   = document.getElementById('tts-status');
+  const content   = document.getElementById('post-content');
+  const btnPlay   = document.getElementById('btn-play');
+  const btnPause  = document.getElementById('btn-pause');
+  const btnStop   = document.getElementById('btn-stop');
+  const status    = document.getElementById('tts-status');
+  const speedBtns = document.querySelectorAll('.speed-btn');
 
-  let utter = null;
-  let paused = false;
+  let rate      = 1.05;
+  let chunks    = [];
+  let index     = 0;
+  let paused    = false;
+  let playing   = false;
+  let viVoice   = null;
 
-  function buildUtterance(text) {
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = 'vi-VN';
-    u.rate = 0.92;
-    u.pitch = 1;
-
-    // prefer a Vietnamese voice if available
+  // ── Voice selection: prefer Google Vietnamese (most natural) ──
+  function loadVoice() {
     const voices = speechSynthesis.getVoices();
-    const viVoice = voices.find(v => v.lang.startsWith('vi'));
-    if (viVoice) u.voice = viVoice;
+    viVoice =
+      voices.find(v => v.name.includes('Google') && v.lang.startsWith('vi')) ||
+      voices.find(v => v.lang === 'vi-VN') ||
+      voices.find(v => v.lang.startsWith('vi')) ||
+      null;
+  }
+  loadVoice();
+  speechSynthesis.addEventListener('voiceschanged', loadVoice);
 
-    u.onstart = () => {
-      status.textContent = '▶ Đang đọc…';
-      btnPlay.disabled  = true;
-      btnPause.disabled = false;
-      btnStop.disabled  = false;
-    };
-    u.onpause = () => { status.textContent = '⏸ Tạm dừng'; };
-    u.onresume = () => { status.textContent = '▶ Đang đọc…'; };
-    u.onend = u.onerror = () => {
-      status.textContent = '';
-      btnPlay.disabled  = false;
-      btnPause.disabled = true;
-      btnStop.disabled  = true;
-      paused = false;
-    };
-    return u;
+  // ── Split content into readable paragraphs ──
+  function buildChunks() {
+    const nodes = content.querySelectorAll('p, h2, h3, li, blockquote');
+    if (nodes.length === 0) {
+      return [{ el: content, text: cleanText(content.innerText) }];
+    }
+    return Array.from(nodes)
+      .map(el => ({ el, text: cleanText(el.innerText) }))
+      .filter(c => c.text.length > 0);
   }
 
+  function cleanText(t) {
+    return t
+      .replace(/\s+/g, ' ')
+      .replace(/[#*_`]/g, '')
+      .trim();
+  }
+
+  // ── Highlight current paragraph ──
+  function highlight(el) {
+    content.querySelectorAll('.reading').forEach(e => e.classList.remove('reading'));
+    if (el) {
+      el.classList.add('reading');
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  // ── Speak one chunk, then advance ──
+  function speakChunk(i) {
+    if (i >= chunks.length) { onDone(); return; }
+
+    const { el, text } = chunks[i];
+    highlight(el);
+
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang  = 'vi-VN';
+    u.rate  = rate;
+    u.pitch = 1.0;
+    if (viVoice) u.voice = viVoice;
+
+    u.onend   = () => { if (playing && !paused) speakChunk(i + 1); };
+    u.onerror = (e) => { if (e.error !== 'interrupted') speakChunk(i + 1); };
+
+    index = i;
+    speechSynthesis.speak(u);
+  }
+
+  function onDone() {
+    playing = false;
+    paused  = false;
+    highlight(null);
+    status.textContent   = '';
+    btnPlay.disabled     = false;
+    btnPause.disabled    = true;
+    btnStop.disabled     = true;
+    btnPause.textContent = '⏸ Dừng';
+  }
+
+  function setPlaying() {
+    playing = true;
+    btnPlay.disabled  = true;
+    btnPause.disabled = false;
+    btnStop.disabled  = false;
+    status.textContent = '▶ Đang đọc…';
+  }
+
+  // ── Controls ──
   btnPlay.addEventListener('click', () => {
     speechSynthesis.cancel();
     paused = false;
-    utter = buildUtterance(rawText);
-    speechSynthesis.speak(utter);
+    chunks = buildChunks();
+    setPlaying();
+    speakChunk(0);
   });
 
   btnPause.addEventListener('click', () => {
     if (!paused) {
       speechSynthesis.pause();
       paused = true;
+      status.textContent   = '⏸ Tạm dừng';
       btnPause.textContent = '▶ Tiếp';
     } else {
       speechSynthesis.resume();
       paused = false;
+      status.textContent   = '▶ Đang đọc…';
       btnPause.textContent = '⏸ Dừng';
     }
   });
 
   btnStop.addEventListener('click', () => {
+    playing = false;
     speechSynthesis.cancel();
-    paused = false;
-    btnPause.textContent = '⏸ Dừng';
+    onDone();
   });
 
-  // voices may load async
-  speechSynthesis.onvoiceschanged = () => { /* ready */ };
+  speedBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      rate = parseFloat(btn.dataset.rate);
+      speedBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
 })();
 </script>
