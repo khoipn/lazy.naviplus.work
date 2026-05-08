@@ -33,7 +33,7 @@ title: "Đọc file"
     </div>
 
     <div class="tts-bar">
-      <button id="btn-play" class="tts-btn tts-play">▶ Phát</button>
+      <button id="btn-play" class="tts-btn tts-play" disabled>▶ Phát</button>
       <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
       <button id="btn-stop" class="tts-btn tts-stop" disabled>⏹ Tắt</button>
       <div class="tts-speed">
@@ -50,13 +50,13 @@ title: "Đọc file"
 
 </section>
 
+<!-- JSZip loaded as classic script so window.JSZip is available in the module below -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
 <script type="module">
 import * as pdfjsLib from 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs';
 pdfjsLib.GlobalWorkerOptions.workerSrc =
   'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs';
-
-// JSZip loaded as classic script below, accessed via window.JSZip
-await import('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
 
 // ── DOM ──
 const input        = document.getElementById('file-input');
@@ -105,6 +105,7 @@ function reset() {
   fileContent.innerHTML = '';
   speechSynthesis.cancel();
   playing = false;
+  btnPlay.disabled = true;
 }
 
 // ── PDF parser ──
@@ -126,7 +127,12 @@ async function parsePDF(buffer) {
       lbl.textContent = `— Trang ${i} —`;
       frag.appendChild(lbl);
     }
-    paras.forEach(t => { if (t.trim()) { const p = document.createElement('p'); p.textContent = t; frag.appendChild(p); } });
+    paras.forEach(t => {
+      if (!t.trim()) return;
+      const p = document.createElement('p');
+      p.textContent = t;
+      frag.appendChild(p);
+    });
   }
   return { fragment: frag, info: `${total} trang` };
 }
@@ -137,8 +143,9 @@ function groupIntoLines(items) {
     const y = Math.round(item.transform[5]);
     (rows[y] = rows[y] || []).push(item.str);
   }
-  return Object.keys(rows).sort((a,b) => b-a)
-    .map(y => rows[y].join(' ').replace(/\s+/g,' ').trim()).filter(Boolean);
+  return Object.keys(rows).sort((a, b) => b - a)
+    .map(y => rows[y].join(' ').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
 }
 function groupIntoParagraphs(lines) {
   const paras = []; let cur = [];
@@ -154,14 +161,12 @@ function groupIntoParagraphs(lines) {
 async function parsePPTX(buffer) {
   const JSZip = window.JSZip;
   const zip   = await JSZip.loadAsync(buffer);
-
-  // get slide order from presentation.xml rels
   const slideOrder = await getSlideOrder(zip);
   const total = slideOrder.length;
   const frag  = document.createDocumentFragment();
 
   for (let i = 0; i < total; i++) {
-    setProgress(Math.round(((i+1) / total) * 100), `Đang xử lý slide ${i+1}/${total}…`);
+    setProgress(Math.round(((i + 1) / total) * 100), `Đang xử lý slide ${i + 1}/${total}…`);
     const slideFile = zip.file(slideOrder[i]);
     if (!slideFile) continue;
     const xml   = await slideFile.async('string');
@@ -169,19 +174,20 @@ async function parsePPTX(buffer) {
 
     const lbl = document.createElement('p');
     lbl.className = 'page-label';
-    lbl.textContent = `— Slide ${i+1} —`;
+    lbl.textContent = `— Slide ${i + 1} —`;
     frag.appendChild(lbl);
 
     texts.forEach(t => {
       if (!t.trim()) return;
-      const p = document.createElement('p'); p.textContent = t; frag.appendChild(p);
+      const p = document.createElement('p');
+      p.textContent = t;
+      frag.appendChild(p);
     });
   }
   return { fragment: frag, info: `${total} slide` };
 }
 
 async function getSlideOrder(zip) {
-  // parse ppt/_rels/presentation.xml.rels to get rId → slide path mapping
   const relsFile = zip.file('ppt/_rels/presentation.xml.rels');
   if (!relsFile) return fallbackSlideOrder(zip);
 
@@ -190,20 +196,21 @@ async function getSlideOrder(zip) {
   const doc     = parser.parseFromString(relsXml, 'text/xml');
   const relMap  = {};
   doc.querySelectorAll('Relationship').forEach(r => {
-    if (r.getAttribute('Type')?.includes('/slide"') ||
-        r.getAttribute('Type')?.endsWith('/slide')) {
-      relMap[r.getAttribute('Id')] = 'ppt/' + r.getAttribute('Target').replace(/^\.\.\//, '');
+    const type = r.getAttribute('Type') || '';
+    if (type.endsWith('/slide')) {
+      const target = r.getAttribute('Target').replace(/^\.\.\//, '');
+      relMap[r.getAttribute('Id')] = 'ppt/' + target;
     }
   });
 
-  // parse ppt/presentation.xml for slide order
   const presFile = zip.file('ppt/presentation.xml');
   if (!presFile) return Object.values(relMap);
   const presXml = await presFile.async('string');
   const presDoc = parser.parseFromString(presXml, 'text/xml');
   const ordered = [];
-  presDoc.querySelectorAll('sldIdLst sldId').forEach(s => {
-    const rId  = s.getAttribute('r:id') || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','id');
+  presDoc.querySelectorAll('sldIdLst > sldId').forEach(s => {
+    const rId = s.getAttribute('r:id')
+             || s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id');
     if (rId && relMap[rId]) ordered.push(relMap[rId]);
   });
   return ordered.length ? ordered : Object.values(relMap);
@@ -212,21 +219,19 @@ async function getSlideOrder(zip) {
 function fallbackSlideOrder(zip) {
   return Object.keys(zip.files)
     .filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n))
-    .sort((a,b) => {
-      const na = parseInt(a.match(/\d+/)[0]), nb = parseInt(b.match(/\d+/)[0]);
+    .sort((a, b) => {
+      const na = parseInt(a.match(/\d+/)[0]);
+      const nb = parseInt(b.match(/\d+/)[0]);
       return na - nb;
     });
 }
 
 function extractPPTXTexts(xml) {
-  // collect runs within each paragraph <a:p>, join runs, then return per-paragraph
-  const parser = new DOMParser();
-  const doc    = parser.parseFromString(xml, 'text/xml');
-  const paras  = [];
+  const doc   = new DOMParser().parseFromString(xml, 'text/xml');
+  const paras = [];
   doc.querySelectorAll('p').forEach(p => {
-    // <a:t> inside this paragraph
-    const runs = Array.from(p.querySelectorAll('t')).map(t => t.textContent).join('');
-    if (runs.trim()) paras.push(runs.trim());
+    const text = Array.from(p.querySelectorAll('t')).map(t => t.textContent).join('');
+    if (text.trim()) paras.push(text.trim());
   });
   return paras;
 }
@@ -241,7 +246,7 @@ async function handleFile(file) {
 
   if (ext === 'ppt') {
     progressBar.classList.add('hidden');
-    showError('⚠️ Định dạng .ppt cũ không hỗ trợ. Vui lòng mở bằng PowerPoint / LibreOffice rồi "Save As" → .pptx và thử lại.');
+    showError('⚠️ Định dạng .ppt cũ không hỗ trợ. Vui lòng mở bằng PowerPoint / LibreOffice → "Save As" → .pptx rồi thử lại.');
     return;
   }
   if (ext !== 'pdf' && ext !== 'pptx') {
@@ -260,6 +265,7 @@ async function handleFile(file) {
     fileInfo.textContent = info;
     fileContent.appendChild(fragment);
     progressBar.classList.add('hidden');
+    btnPlay.disabled = false;           // enable play only after content is ready
     readerSection.classList.remove('hidden');
     readerSection.scrollIntoView({ behavior: 'smooth' });
   } catch (err) {
@@ -272,15 +278,17 @@ input.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.targ
 dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
 dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
 dropZone.addEventListener('drop', e => {
-  e.preventDefault(); dropZone.classList.remove('drag-over');
-  const f = e.dataTransfer.files[0]; if (f) handleFile(f);
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) handleFile(f);
 });
 
 // ── TTS ──
 function buildChunks() {
   return Array.from(fileContent.querySelectorAll('p'))
-    .map(el => ({ el, text: el.textContent.trim() }))
-    .filter(c => c.text.length > 0 && !el.classList?.contains('page-label'));
+    .filter(el => !el.classList.contains('page-label') && el.textContent.trim().length > 0)
+    .map(el => ({ el, text: el.textContent.trim() }));
 }
 
 function highlight(el) {
@@ -302,19 +310,27 @@ function speakChunk(i) {
 }
 
 function onDone() {
-  playing = paused = false; highlight(null);
-  statusEl.textContent = ''; btnPlay.disabled = false;
-  btnPause.disabled = true; btnStop.disabled = true;
+  playing = paused = false;
+  highlight(null);
+  statusEl.textContent = '';
+  btnPlay.disabled  = false;
+  btnPause.disabled = true;
+  btnStop.disabled  = true;
   btnPause.textContent = '⏸ Dừng';
 }
 
 btnPlay.addEventListener('click', () => {
-  speechSynthesis.cancel(); paused = false; playing = true;
-  chunks = buildChunks();
-  btnPlay.disabled = true; btnPause.disabled = false; btnStop.disabled = false;
+  speechSynthesis.cancel();
+  paused  = false;
+  playing = true;
+  chunks  = buildChunks();
+  btnPlay.disabled  = true;
+  btnPause.disabled = false;
+  btnStop.disabled  = false;
   statusEl.textContent = '▶ Đang đọc…';
   speakChunk(0);
 });
+
 btnPause.addEventListener('click', () => {
   if (!paused) {
     speechSynthesis.pause(); paused = true;
@@ -324,7 +340,11 @@ btnPause.addEventListener('click', () => {
     statusEl.textContent = '▶ Đang đọc…'; btnPause.textContent = '⏸ Dừng';
   }
 });
-btnStop.addEventListener('click', () => { playing = false; speechSynthesis.cancel(); onDone(); });
+
+btnStop.addEventListener('click', () => {
+  playing = false; speechSynthesis.cancel(); onDone();
+});
+
 speedBtns.forEach(btn => {
   btn.addEventListener('click', () => {
     rate = parseFloat(btn.dataset.rate);
