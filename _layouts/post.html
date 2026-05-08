@@ -1,0 +1,91 @@
+---
+layout: default
+---
+<article class="post">
+  <div class="post-header">
+    <a href="{{ '/' | relative_url }}" class="back-link">← Danh sách</a>
+    <h1 class="post-title">{{ page.title }}</h1>
+    <time class="post-date">{{ page.date | date: "%d/%m/%Y" }}</time>
+  </div>
+
+  <div class="tts-bar">
+    <button id="btn-play" class="tts-btn tts-play" title="Phát">▶ Phát</button>
+    <button id="btn-pause" class="tts-btn tts-pause" title="Tạm dừng" disabled>⏸ Dừng</button>
+    <button id="btn-stop" class="tts-btn tts-stop" title="Dừng hẳn" disabled>⏹ Tắt</button>
+    <span id="tts-status" class="tts-status"></span>
+  </div>
+
+  <div id="post-content" class="post-content">
+    {{ content }}
+  </div>
+</article>
+
+<script>
+(function () {
+  const rawText = document.getElementById('post-content').innerText;
+  const btnPlay  = document.getElementById('btn-play');
+  const btnPause = document.getElementById('btn-pause');
+  const btnStop  = document.getElementById('btn-stop');
+  const status   = document.getElementById('tts-status');
+
+  let utter = null;
+  let paused = false;
+
+  function buildUtterance(text) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'vi-VN';
+    u.rate = 0.92;
+    u.pitch = 1;
+
+    // prefer a Vietnamese voice if available
+    const voices = speechSynthesis.getVoices();
+    const viVoice = voices.find(v => v.lang.startsWith('vi'));
+    if (viVoice) u.voice = viVoice;
+
+    u.onstart = () => {
+      status.textContent = '▶ Đang đọc…';
+      btnPlay.disabled  = true;
+      btnPause.disabled = false;
+      btnStop.disabled  = false;
+    };
+    u.onpause = () => { status.textContent = '⏸ Tạm dừng'; };
+    u.onresume = () => { status.textContent = '▶ Đang đọc…'; };
+    u.onend = u.onerror = () => {
+      status.textContent = '';
+      btnPlay.disabled  = false;
+      btnPause.disabled = true;
+      btnStop.disabled  = true;
+      paused = false;
+    };
+    return u;
+  }
+
+  btnPlay.addEventListener('click', () => {
+    speechSynthesis.cancel();
+    paused = false;
+    utter = buildUtterance(rawText);
+    speechSynthesis.speak(utter);
+  });
+
+  btnPause.addEventListener('click', () => {
+    if (!paused) {
+      speechSynthesis.pause();
+      paused = true;
+      btnPause.textContent = '▶ Tiếp';
+    } else {
+      speechSynthesis.resume();
+      paused = false;
+      btnPause.textContent = '⏸ Dừng';
+    }
+  });
+
+  btnStop.addEventListener('click', () => {
+    speechSynthesis.cancel();
+    paused = false;
+    btnPause.textContent = '⏸ Dừng';
+  });
+
+  // voices may load async
+  speechSynthesis.onvoiceschanged = () => { /* ready */ };
+})();
+</script>
