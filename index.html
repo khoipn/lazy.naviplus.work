@@ -65,12 +65,19 @@ title: "Danh sách bài đọc"
     renderPagination(page, Math.ceil(allArticles.length / PAGE_SIZE));
   }
 
+  function getProgress(url) {
+    try { return JSON.parse(localStorage.getItem('lazy_tts_' + url)); } catch { return null; }
+  }
+
   function makeItem(a) {
-    const isApi = a.source === 'api';
-    const url   = isApi ? `/api/articles/${a.id}` : a.url;
-    const date  = new Date(a.date || a.created_at).toLocaleDateString('vi-VN',
+    const isApi    = a.source === 'api';
+    const url      = isApi ? `/api/articles/${a.id}` : a.url;
+    const date     = new Date(a.date || a.created_at).toLocaleDateString('vi-VN',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
-    const cat   = a.category || '';
+    const cat      = a.category || '';
+    const progress = getProgress(url);
+    const hasProg  = progress && progress.chunk > 0 && progress.total > 0;
+    const pct      = hasProg ? Math.round((progress.chunk / progress.total) * 100) : 0;
 
     const li = document.createElement('li');
     li.className = 'post-item';
@@ -82,9 +89,11 @@ title: "Danh sách bài đọc"
           <time>${date}</time>
           ${cat ? `<span class="tag">${cat}</span>` : ''}
           ${isApi ? `<span class="tag tag-api">API</span>` : ''}
+          ${hasProg ? `<span class="tag tag-playing">▶ đoạn ${progress.chunk + 1}/${progress.total}</span>` : ''}
         </div>
         <h2 class="post-item-title">${a.title}</h2>
         ${a.excerpt ? `<p class="post-excerpt">${a.excerpt}</p>` : ''}
+        ${hasProg ? `<div class="item-progress-bar"><div class="item-progress-fill" style="width:${pct}%"></div></div>` : ''}
       </a>
       ${isApi ? `<button class="delete-item-btn" title="Xóa bài này" data-id="${a.id}" data-title="${a.title.replace(/"/g,'&quot;')}">×</button>` : ''}`;
 

@@ -71,8 +71,8 @@ layout: default
   }
 
   // ── Progress ──
-  function saveProgress(i) { localStorage.setItem(PROGRESS_KEY, i); }
-  function loadProgress()  { const v = localStorage.getItem(PROGRESS_KEY); return v !== null ? parseInt(v) : 0; }
+  function saveProgress(i) { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ chunk: i, total: chunks.length })); }
+  function loadProgress()  { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)); } catch { return null; } }
   function clearProgress() { localStorage.removeItem(PROGRESS_KEY); }
 
   function updateSeek(i) {
@@ -121,13 +121,16 @@ layout: default
     updateSeek(0);
   }
 
+  // ── Stop audio khi rời trang ──
+  window.addEventListener('pagehide', () => speechSynthesis.cancel());
+
   // ── Init: check saved progress ──
   chunks = buildChunks();
   seekBar.max = Math.max(0, chunks.length - 1);
   const saved = loadProgress();
-  if (saved > 0 && saved < chunks.length) {
-    updateSeek(saved);
-    resumeText.textContent = `Lần trước đọc đến đoạn ${saved + 1} / ${chunks.length}`;
+  if (saved && saved.chunk > 0 && saved.chunk < chunks.length) {
+    updateSeek(saved.chunk);
+    resumeText.textContent = `Lần trước đọc đến đoạn ${saved.chunk + 1} / ${chunks.length}`;
     resumeHint.classList.remove('hidden');
   } else {
     updateSeek(0);
@@ -135,8 +138,7 @@ layout: default
 
   // ── Controls ──
   btnPlay.addEventListener('click', () => {
-    chunks = buildChunks();
-    seekBar.max = Math.max(0, chunks.length - 1);
+    if (!chunks.length) { chunks = buildChunks(); seekBar.max = Math.max(0, chunks.length - 1); }
     startFrom(parseInt(seekBar.value) || 0);
   });
 
