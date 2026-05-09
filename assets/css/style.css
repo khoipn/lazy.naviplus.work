@@ -111,7 +111,10 @@ main {
   display: flex;
   flex-direction: column;
   gap: .6rem;
-  margin-bottom: 1.5rem;
+  margin-bottom: 1.25rem;
+  position: sticky;
+  top: 56px; /* below site header */
+  z-index: 10;
 }
 
 /* ── Row 1: main buttons ── */
@@ -229,7 +232,7 @@ main {
 
   .tts-container {
     position: fixed;
-    bottom: 0; left: 0; right: 0;
+    bottom: 0; top: auto; left: 0; right: 0;
     border-radius: 16px 16px 0 0;
     border-bottom: none;
     padding: .9rem 1rem calc(.9rem + env(safe-area-inset-bottom));

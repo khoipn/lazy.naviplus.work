@@ -8,35 +8,35 @@ layout: default
     <time class="post-date">{{ page.date | date: "%d/%m/%Y" }}</time>
   </div>
 
+  <div class="tts-container">
+    <div class="tts-main">
+      <button id="btn-play"  class="tts-btn tts-play">▶ Phát</button>
+      <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
+      <button id="btn-stop"  class="tts-btn tts-stop"  disabled>⏹ Tắt</button>
+      <span id="tts-status" class="tts-status"></span>
+    </div>
+    <div class="tts-seek-row">
+      <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" />
+      <span id="seek-label" class="seek-label">0 / 0</span>
+    </div>
+    <div class="tts-bottom">
+      <div class="tts-speed">
+        <button class="speed-btn" data-rate="0.9">0.9×</button>
+        <button class="speed-btn active" data-rate="1.05">1.0×</button>
+        <button class="speed-btn" data-rate="1.25">1.25×</button>
+        <button class="speed-btn" data-rate="1.5">1.5×</button>
+      </div>
+      <div id="resume-hint" class="resume-hint hidden">
+        <span id="resume-text"></span>
+        <button id="btn-restart" class="restart-btn">Đọc từ đầu</button>
+      </div>
+    </div>
+  </div>
+
   <div id="post-content" class="post-content">
     {{ content }}
   </div>
 </article>
-
-<div class="tts-container">
-  <div class="tts-main">
-    <button id="btn-play"  class="tts-btn tts-play">▶ Phát</button>
-    <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
-    <button id="btn-stop"  class="tts-btn tts-stop"  disabled>⏹ Tắt</button>
-    <span id="tts-status" class="tts-status"></span>
-  </div>
-  <div class="tts-seek-row">
-    <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" />
-    <span id="seek-label" class="seek-label">0 / 0</span>
-  </div>
-  <div class="tts-bottom">
-    <div class="tts-speed">
-      <button class="speed-btn" data-rate="0.9">0.9×</button>
-      <button class="speed-btn active" data-rate="1.05">1.0×</button>
-      <button class="speed-btn" data-rate="1.25">1.25×</button>
-      <button class="speed-btn" data-rate="1.5">1.5×</button>
-    </div>
-    <div id="resume-hint" class="resume-hint hidden">
-      <span id="resume-text"></span>
-      <button id="btn-restart" class="restart-btn">Đọc từ đầu</button>
-    </div>
-  </div>
-</div>
 
 <script>
 (function () {
