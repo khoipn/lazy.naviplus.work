@@ -71,7 +71,7 @@ title: "Danh sách bài đọc"
 
   function makeItem(a) {
     const isApi    = a.source === 'api';
-    const url      = isApi ? `/api/articles/${a.id}` : a.url;
+    const url      = isApi ? `/read/${a.id}` : a.url;
     const date     = new Date(a.date || a.created_at).toLocaleDateString('vi-VN',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const cat      = a.category || '';
