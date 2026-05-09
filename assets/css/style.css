@@ -186,6 +186,7 @@ main {
   align-items: center;
   gap: .75rem;
   flex-wrap: wrap;
+  margin-top: .5rem;
 }
 .tts-speed { display: flex; gap: .3rem; }
 .speed-btn {
