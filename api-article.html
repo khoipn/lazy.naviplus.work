@@ -1,0 +1,142 @@
+---
+layout: default
+permalink: /api/articles/:id
+---
+<!-- trang này không bao giờ được Jekyll render với :id thật
+     Cloudflare Pages sẽ serve file này cho mọi /api/articles/* path
+     còn nội dung được load bằng JS từ /api/articles/{id} -->
+<article class="post" id="article-container">
+
+  <div class="post-header">
+    <a href="{{ '/' | relative_url }}" class="back-link">← Danh sách</a>
+    <div id="article-loading" class="loading-state">Đang tải bài viết…</div>
+    <h1 id="article-title" class="post-title" style="display:none"></h1>
+    <div id="article-meta" class="post-date" style="display:none"></div>
+  </div>
+
+  <div id="tts-section" style="display:none">
+    <div class="tts-bar">
+      <button id="btn-play" class="tts-btn tts-play">▶ Phát</button>
+      <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
+      <button id="btn-stop" class="tts-btn tts-stop" disabled>⏹ Tắt</button>
+      <div class="tts-speed">
+        <button class="speed-btn" data-rate="0.9">0.9×</button>
+        <button class="speed-btn active" data-rate="1.05">1.0×</button>
+        <button class="speed-btn" data-rate="1.25">1.25×</button>
+        <button class="speed-btn" data-rate="1.5">1.5×</button>
+      </div>
+      <span id="tts-status" class="tts-status"></span>
+    </div>
+  </div>
+
+  <div id="article-content" class="post-content" style="display:none"></div>
+  <div id="article-error" class="error-box hidden"></div>
+
+</article>
+
+<script>
+(async function () {
+  const id = location.pathname.split('/').pop();
+  if (!id) { showError('Không xác định được ID bài viết.'); return; }
+
+  let article;
+  try {
+    const res = await fetch(`/api/articles/${id}`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    article = data;
+  } catch (e) {
+    showError(`Không tải được bài viết: ${e.message}`);
+    return;
+  }
+
+  document.title = article.title + ' — Lazy Reader';
+  document.getElementById('article-loading').style.display = 'none';
+
+  const titleEl = document.getElementById('article-title');
+  titleEl.textContent = article.title;
+  titleEl.style.display = '';
+
+  const metaEl = document.getElementById('article-meta');
+  const date = new Date(article.created_at).toLocaleDateString('vi-VN',
+    { day: '2-digit', month: '2-digit', year: 'numeric' });
+  metaEl.textContent = date + (article.category ? ` · ${article.category}` : '');
+  metaEl.style.display = '';
+
+  // render content paragraphs
+  const contentEl = document.getElementById('article-content');
+  article.content.split(/\n+/).forEach(line => {
+    if (!line.trim()) return;
+    const p = document.createElement('p');
+    p.textContent = line.trim();
+    contentEl.appendChild(p);
+  });
+  contentEl.style.display = '';
+  document.getElementById('tts-section').style.display = '';
+
+  // ── TTS ──
+  let rate = 1.05, chunks = [], index = 0, paused = false, playing = false, viVoice = null;
+  const btnPlay  = document.getElementById('btn-play');
+  const btnPause = document.getElementById('btn-pause');
+  const btnStop  = document.getElementById('btn-stop');
+  const statusEl = document.getElementById('tts-status');
+
+  function loadVoice() {
+    const v = speechSynthesis.getVoices();
+    viVoice = v.find(x => x.name.includes('Google') && x.lang.startsWith('vi'))
+           || v.find(x => x.lang === 'vi-VN') || v.find(x => x.lang.startsWith('vi')) || null;
+  }
+  loadVoice();
+  speechSynthesis.addEventListener('voiceschanged', loadVoice);
+
+  function highlight(el) {
+    contentEl.querySelectorAll('.reading').forEach(e => e.classList.remove('reading'));
+    if (el) { el.classList.add('reading'); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+  }
+  function speakChunk(i) {
+    if (i >= chunks.length) { onDone(); return; }
+    const { el, text } = chunks[i];
+    highlight(el);
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'vi-VN'; u.rate = rate; u.pitch = 1.0;
+    if (viVoice) u.voice = viVoice;
+    u.onend   = () => { if (playing && !paused) speakChunk(i + 1); };
+    u.onerror = e => { if (e.error !== 'interrupted') speakChunk(i + 1); };
+    index = i;
+    speechSynthesis.speak(u);
+  }
+  function onDone() {
+    playing = paused = false; highlight(null);
+    statusEl.textContent = ''; btnPlay.disabled = false;
+    btnPause.disabled = true; btnStop.disabled = true;
+    btnPause.textContent = '⏸ Dừng';
+  }
+
+  btnPlay.addEventListener('click', () => {
+    speechSynthesis.cancel(); paused = false; playing = true;
+    chunks = Array.from(contentEl.querySelectorAll('p'))
+      .map(el => ({ el, text: el.textContent.trim() })).filter(c => c.text);
+    btnPlay.disabled = true; btnPause.disabled = false; btnStop.disabled = false;
+    statusEl.textContent = '▶ Đang đọc…';
+    speakChunk(0);
+  });
+  btnPause.addEventListener('click', () => {
+    if (!paused) { speechSynthesis.pause(); paused = true; statusEl.textContent = '⏸ Tạm dừng'; btnPause.textContent = '▶ Tiếp'; }
+    else { speechSynthesis.resume(); paused = false; statusEl.textContent = '▶ Đang đọc…'; btnPause.textContent = '⏸ Dừng'; }
+  });
+  btnStop.addEventListener('click', () => { playing = false; speechSynthesis.cancel(); onDone(); });
+  document.querySelectorAll('.speed-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      rate = parseFloat(btn.dataset.rate);
+      document.querySelectorAll('.speed-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  function showError(msg) {
+    document.getElementById('article-loading').style.display = 'none';
+    const el = document.getElementById('article-error');
+    el.textContent = msg; el.classList.remove('hidden');
+  }
+})();
+</script>

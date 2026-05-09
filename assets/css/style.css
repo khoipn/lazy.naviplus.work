@@ -53,10 +53,8 @@ main {
 .list-header h1 { font-size: 1.6rem; font-weight: 700; }
 .subtitle { color: var(--text-muted); margin-top: .25rem; font-size: .95rem; }
 .list-header-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-.upload-link {
-  flex-shrink: 0;
-  background: var(--accent);
-  color: #fff;
+.header-actions { display: flex; gap: .5rem; flex-shrink: 0; }
+.upload-link, .api-link {
   text-decoration: none;
   padding: .45rem 1rem;
   border-radius: 7px;
@@ -64,7 +62,13 @@ main {
   font-weight: 600;
   transition: background .15s;
 }
+.upload-link { background: var(--accent); color: #fff; }
 .upload-link:hover { background: var(--accent-hover); }
+.api-link { background: #f0ede8; color: var(--text); border: 1px solid var(--border); }
+.api-link:hover { background: #e3dfd8; }
+
+.tag-api { background: #eff6ff; color: #1d4ed8; }
+.loading-state { color: var(--text-muted); font-size: .95rem; padding: .5rem 0; }
 
 .post-list { list-style: none; display: flex; flex-direction: column; gap: .75rem; }
 
@@ -333,6 +337,114 @@ main {
   font-size: .8rem;
   margin: 1.25rem 0 .75rem;
   letter-spacing: .05em;
+}
+
+/* ── API page ── */
+.api-page { }
+.api-header { margin-bottom: 1.5rem; }
+.api-header h1 { font-size: 1.6rem; font-weight: 700; }
+
+.api-base-url {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  background: #f1f5f9;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: .65rem 1rem;
+  margin-bottom: 2rem;
+  font-size: .9rem;
+}
+.api-base-url .label { font-size: .75rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .05em; }
+.api-base-url code { font-size: .9rem; }
+
+.endpoint-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+.endpoint-block h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: .75rem; }
+.endpoint-block h3 { font-size: .85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 1.1rem 0 .4rem; }
+.endpoint-block p  { font-size: .92rem; color: var(--text-muted); margin-bottom: .5rem; }
+
+.endpoint-title {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  margin-bottom: .85rem;
+  flex-wrap: wrap;
+}
+.method {
+  font-size: .75rem;
+  font-weight: 800;
+  padding: .2rem .55rem;
+  border-radius: 5px;
+  letter-spacing: .04em;
+}
+.method.get  { background: #dcfce7; color: #166534; }
+.method.post { background: #dbeafe; color: #1e40af; }
+
+.badge-public { font-size: .72rem; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; border-radius: 4px; padding: .1rem .45rem; font-weight: 600; }
+.badge-auth   { font-size: .72rem; background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 4px; padding: .1rem .45rem; font-weight: 600; }
+
+.code-block {
+  background: #1e1e2e;
+  color: #cdd6f4;
+  border-radius: 7px;
+  padding: .85rem 1rem;
+  font-size: .82rem;
+  overflow-x: auto;
+  margin: .4rem 0 .75rem;
+  white-space: pre;
+}
+
+.api-table { width: 100%; border-collapse: collapse; font-size: .85rem; margin: .4rem 0 .5rem; }
+.api-table th { background: #f8f7f4; text-align: left; padding: .45rem .75rem; font-weight: 600; border-bottom: 1px solid var(--border); }
+.api-table td { padding: .45rem .75rem; border-bottom: 1px solid #f1ede7; vertical-align: top; }
+.api-table code { font-size: .82rem; background: #f1f5f9; padding: .1rem .3rem; border-radius: 3px; }
+
+.try-btn {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  border-radius: 6px;
+  padding: .4rem .9rem;
+  font-size: .85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: .25rem;
+  transition: background .15s;
+}
+.try-btn:hover { background: var(--accent-hover); }
+
+.result-block {
+  background: #1e1e2e;
+  color: #a6e3a1;
+  border-radius: 7px;
+  padding: .85rem 1rem;
+  font-size: .8rem;
+  overflow-x: auto;
+  margin-top: .75rem;
+  white-space: pre;
+}
+.result-block.hidden { display: none; }
+
+.try-form { display: flex; flex-direction: column; gap: .6rem; margin-top: .5rem; }
+.try-form label { display: flex; flex-direction: column; gap: .25rem; font-size: .83rem; font-weight: 600; color: var(--text-muted); }
+.try-form input, .try-form textarea {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .45rem .65rem;
+  font-size: .88rem;
+  font-family: inherit;
+  background: var(--bg);
+  resize: vertical;
+}
+.try-form input:focus, .try-form textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 
 @media (max-width: 480px) {

@@ -1,0 +1,186 @@
+---
+layout: default
+title: "API Reference"
+permalink: /api/
+---
+<section class="api-page">
+
+  <div class="api-header">
+    <a href="{{ '/' | relative_url }}" class="back-link">← Trang chủ</a>
+    <h1>API Reference</h1>
+    <p class="subtitle">Thêm bài đọc vào danh sách qua HTTP API.</p>
+  </div>
+
+  <div class="api-base-url">
+    <span class="label">Base URL</span>
+    <code id="base-url">https://lazy.naviplus.work</code>
+  </div>
+
+  <!-- ── GET ──────────────────────────────────────── -->
+  <section class="endpoint-block">
+    <div class="endpoint-title">
+      <span class="method get">GET</span>
+      <code>/api/articles</code>
+      <span class="badge-public">Public</span>
+    </div>
+    <p>Lấy danh sách bài đã được thêm qua API (mới nhất lên đầu).</p>
+
+    <h3>Response</h3>
+    <pre class="code-block"><code>{
+  "articles": [
+    {
+      "id": "art_1746789012345_x8k2m",
+      "title": "Tiêu đề bài viết",
+      "category": "Danh mục",
+      "created_at": "2026-05-09T10:30:00.000Z"
+    }
+  ]
+}</code></pre>
+
+    <h3>Thử ngay</h3>
+    <pre class="code-block"><code>curl https://lazy.naviplus.work/api/articles</code></pre>
+    <button class="try-btn" onclick="tryGet()">▶ Chạy</button>
+    <pre id="get-result" class="result-block hidden"></pre>
+  </section>
+
+  <!-- ── POST ─────────────────────────────────────── -->
+  <section class="endpoint-block">
+    <div class="endpoint-title">
+      <span class="method post">POST</span>
+      <code>/api/articles</code>
+      <span class="badge-auth">Cần xác thực</span>
+    </div>
+    <p>Thêm một bài đọc mới vào danh sách. Bài sẽ xuất hiện ngay trên trang chủ.</p>
+
+    <h3>Headers</h3>
+    <table class="api-table">
+      <thead><tr><th>Header</th><th>Giá trị</th><th>Bắt buộc</th></tr></thead>
+      <tbody>
+        <tr><td><code>Content-Type</code></td><td><code>application/json</code></td><td>✓</td></tr>
+        <tr><td><code>Authorization</code></td><td><code>Bearer &lt;API_KEY&gt;</code></td><td>✓</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Request body</h3>
+    <table class="api-table">
+      <thead><tr><th>Trường</th><th>Kiểu</th><th>Bắt buộc</th><th>Giới hạn</th></tr></thead>
+      <tbody>
+        <tr><td><code>title</code></td><td>string</td><td>✓</td><td>200 ký tự</td></tr>
+        <tr><td><code>content</code></td><td>string</td><td>✓</td><td>50.000 ký tự</td></tr>
+        <tr><td><code>category</code></td><td>string</td><td>–</td><td>50 ký tự</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Ví dụ</h3>
+    <pre class="code-block"><code>curl -X POST https://lazy.naviplus.work/api/articles \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer &lt;API_KEY&gt;" \
+  -d '{
+    "title": "Tiêu đề bài viết",
+    "content": "Nội dung bài viết đầy đủ ở đây...",
+    "category": "Danh mục"
+  }'</code></pre>
+
+    <h3>Response — 201 Created</h3>
+    <pre class="code-block"><code>{
+  "id": "art_1746789012345_x8k2m",
+  "title": "Tiêu đề bài viết",
+  "created_at": "2026-05-09T10:30:00.000Z"
+}</code></pre>
+
+    <h3>Thử ngay</h3>
+    <div class="try-form">
+      <label>API Key<input id="try-key" type="password" placeholder="Bearer token" /></label>
+      <label>Tiêu đề<input id="try-title" type="text" placeholder="Tiêu đề bài viết" /></label>
+      <label>Danh mục<input id="try-category" type="text" placeholder="(tuỳ chọn)" /></label>
+      <label>Nội dung<textarea id="try-content" rows="5" placeholder="Nội dung bài viết..."></textarea></label>
+      <button class="try-btn" onclick="tryPost()">▶ Gửi</button>
+    </div>
+    <pre id="post-result" class="result-block hidden"></pre>
+  </section>
+
+  <!-- ── Mã lỗi ────────────────────────────────────── -->
+  <section class="endpoint-block">
+    <h2>Mã lỗi</h2>
+    <table class="api-table">
+      <thead><tr><th>HTTP</th><th>Ý nghĩa</th></tr></thead>
+      <tbody>
+        <tr><td><code>201</code></td><td>Tạo thành công</td></tr>
+        <tr><td><code>400</code></td><td>Thiếu hoặc sai trường dữ liệu</td></tr>
+        <tr><td><code>401</code></td><td>Sai hoặc thiếu API Key</td></tr>
+        <tr><td><code>503</code></td><td>Server chưa cấu hình API_KEY hoặc KV binding</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ── Cấu hình server ───────────────────────────── -->
+  <section class="endpoint-block">
+    <h2>Cấu hình server (Cloudflare Pages)</h2>
+    <p>Cần thêm 2 thứ trong <strong>Cloudflare Pages → Settings</strong>:</p>
+
+    <h3>1. Environment variable</h3>
+    <table class="api-table">
+      <thead><tr><th>Tên</th><th>Giá trị</th></tr></thead>
+      <tbody>
+        <tr><td><code>API_KEY</code></td><td>Chuỗi bí mật tuỳ chọn (dùng làm Bearer token)</td></tr>
+      </tbody>
+    </table>
+
+    <h3>2. KV Namespace binding</h3>
+    <p>Vào <strong>Workers & Pages → KV → Create namespace</strong> → đặt tên <code>lazy_articles</code>.<br/>
+    Sau đó vào <strong>Pages project → Settings → KV namespace bindings → Add binding</strong>:</p>
+    <table class="api-table">
+      <thead><tr><th>Variable name</th><th>KV namespace</th></tr></thead>
+      <tbody>
+        <tr><td><code>ARTICLES_KV</code></td><td><code>lazy_articles</code></td></tr>
+      </tbody>
+    </table>
+    <p>Redeploy sau khi thêm binding.</p>
+  </section>
+
+</section>
+
+<script>
+const base = window.location.origin;
+document.getElementById('base-url').textContent = base;
+
+async function tryGet() {
+  const el = document.getElementById('get-result');
+  el.classList.remove('hidden');
+  el.textContent = 'Đang gọi API…';
+  try {
+    const res  = await fetch(`${base}/api/articles`);
+    const data = await res.json();
+    el.textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    el.textContent = `Lỗi: ${e.message}`;
+  }
+}
+
+async function tryPost() {
+  const el       = document.getElementById('post-result');
+  const key      = document.getElementById('try-key').value.trim();
+  const title    = document.getElementById('try-title').value.trim();
+  const category = document.getElementById('try-category').value.trim();
+  const content  = document.getElementById('try-content').value.trim();
+
+  el.classList.remove('hidden');
+  if (!key || !title || !content) {
+    el.textContent = '⚠️ Cần điền API Key, Tiêu đề và Nội dung.';
+    return;
+  }
+  el.textContent = 'Đang gửi…';
+  try {
+    const res  = await fetch(`${base}/api/articles`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ title, content, category }),
+    });
+    const data = await res.json();
+    el.textContent = `HTTP ${res.status}\n\n${JSON.stringify(data, null, 2)}`;
+    if (res.ok) setTimeout(() => window.location.href = '/', 1500);
+  } catch (e) {
+    el.textContent = `Lỗi: ${e.message}`;
+  }
+}
+</script>

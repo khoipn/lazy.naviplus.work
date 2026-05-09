@@ -8,11 +8,17 @@ title: "Danh sách bài đọc"
       <h1>Danh sách bài đọc</h1>
       <p class="subtitle">Bấm vào bài để nghe đọc tiếng Việt</p>
     </div>
-    <a href="{{ '/upload' | relative_url }}" class="upload-link">+ Đọc PDF / PPTX</a>
+    <div class="header-actions">
+      <a href="{{ '/upload' | relative_url }}" class="upload-link">+ Đọc PDF / PPTX</a>
+      <a href="{{ '/api' | relative_url }}" class="api-link">API</a>
+    </div>
   </div>
 </section>
 
-<ul class="post-list">
+<!-- bài từ API (dynamic) sẽ được prepend vào đây bằng JS -->
+<ul id="dynamic-list" class="post-list" style="display:none"></ul>
+
+<ul id="static-list" class="post-list">
   {% assign sorted_posts = site.posts | sort: 'date' | reverse %}
   {% for post in sorted_posts %}
   <li class="post-item">
@@ -29,3 +35,33 @@ title: "Danh sách bài đọc"
   </li>
   {% endfor %}
 </ul>
+
+<script>
+(async function () {
+  try {
+    const res  = await fetch('/api/articles');
+    if (!res.ok) return;
+    const { articles } = await res.json();
+    if (!articles || articles.length === 0) return;
+
+    const list = document.getElementById('dynamic-list');
+    articles.forEach(a => {
+      const date = new Date(a.created_at).toLocaleDateString('vi-VN',
+        { day: '2-digit', month: '2-digit', year: 'numeric' });
+      const li = document.createElement('li');
+      li.className = 'post-item';
+      li.innerHTML = `
+        <a href="/api/articles/${a.id}" class="post-link">
+          <div class="post-meta">
+            <time>${date}</time>
+            ${a.category ? `<span class="tag">${a.category}</span>` : ''}
+            <span class="tag tag-api">API</span>
+          </div>
+          <h2 class="post-item-title">${a.title}</h2>
+        </a>`;
+      list.appendChild(li);
+    });
+    list.style.display = '';
+  } catch (_) { /* API chưa cấu hình, bỏ qua */ }
+})();
+</script>
