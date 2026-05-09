@@ -264,6 +264,12 @@ main {
 /* ══════════════════════════════════════
    INDEX LIST
 ══════════════════════════════════════ */
+.title-mobile { display: none; }
+@media (max-width: 768px) {
+  .title-desktop { display: none; }
+  .title-mobile  { display: inline; }
+}
+
 .list-header { margin-bottom: 1.5rem; }
 .list-header h1 { font-size: 1.6rem; font-weight: 700; }
 .subtitle { color: var(--text-muted); margin-top: .25rem; font-size: .95rem; }
