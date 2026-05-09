@@ -15,53 +15,173 @@ title: "Danh sách bài đọc"
   </div>
 </section>
 
-<!-- bài từ API (dynamic) sẽ được prepend vào đây bằng JS -->
-<ul id="dynamic-list" class="post-list" style="display:none"></ul>
+<div class="list-toolbar hidden" id="list-toolbar">
+  <span id="toolbar-count" class="toolbar-count"></span>
+  <button id="btn-delete-all" class="delete-all-btn">🗑 Xóa tất cả bài API</button>
+</div>
 
-<ul id="static-list" class="post-list">
-  {% assign sorted_posts = site.posts | sort: 'date' | reverse %}
-  {% for post in sorted_posts %}
-  <li class="post-item">
-    <a href="{{ post.url | relative_url }}" class="post-link">
-      <div class="post-meta">
-        <time>{{ post.date | date: "%d/%m/%Y" }}</time>
-        {% if post.category %}<span class="tag">{{ post.category }}</span>{% endif %}
-      </div>
-      <h2 class="post-item-title">{{ post.title }}</h2>
-      {% if post.excerpt %}
-      <p class="post-excerpt">{{ post.excerpt | strip_html | truncate: 120 }}</p>
-      {% endif %}
-    </a>
-  </li>
-  {% endfor %}
-</ul>
+<ul id="post-list" class="post-list"></ul>
+<div id="pagination" class="pagination"></div>
+
+<!-- static post data for client-side merge -->
+<script type="application/json" id="static-data">
+[{% for post in site.posts %}{"title":{{ post.title | jsonify }},"url":{{ post.url | relative_url | jsonify }},"date":{{ post.date | date_to_xmlschema | jsonify }},"category":{{ post.category | default:"" | jsonify }},"excerpt":{{ post.excerpt | strip_html | truncate: 120 | jsonify }},"source":"static"}{% unless forloop.last %},{% endunless %}{% endfor %}]
+</script>
 
 <script>
 (async function () {
-  try {
-    const res  = await fetch('/api/articles');
-    if (!res.ok) return;
-    const { articles } = await res.json();
-    if (!articles || articles.length === 0) return;
+  const PAGE_SIZE = 8;
+  let allArticles = [];
+  let currentPage = 1;
 
-    const list = document.getElementById('dynamic-list');
-    articles.forEach(a => {
-      const date = new Date(a.created_at).toLocaleDateString('vi-VN',
-        { day: '2-digit', month: '2-digit', year: 'numeric' });
-      const li = document.createElement('li');
-      li.className = 'post-item';
-      li.innerHTML = `
-        <a href="/api/articles/${a.id}" class="post-link">
-          <div class="post-meta">
-            <time>${date}</time>
-            ${a.category ? `<span class="tag">${a.category}</span>` : ''}
-            <span class="tag tag-api">API</span>
-          </div>
-          <h2 class="post-item-title">${a.title}</h2>
-        </a>`;
-      list.appendChild(li);
+  // ── Load data ──
+  const staticPosts = JSON.parse(document.getElementById('static-data').textContent);
+
+  let apiArticles = [];
+  try {
+    const res = await fetch('/api/articles');
+    if (res.ok) {
+      const { articles } = await res.json();
+      apiArticles = (articles || []).map(a => ({ ...a, source: 'api' }));
+    }
+  } catch (_) {}
+
+  // merge & sort newest first
+  allArticles = [...apiArticles, ...staticPosts].sort(
+    (a, b) => new Date(b.date || b.created_at) - new Date(a.date || a.created_at)
+  );
+
+  renderPage(currentPage);
+  updateToolbar();
+
+  // ── Render ──
+  function renderPage(page) {
+    currentPage = page;
+    const start = (page - 1) * PAGE_SIZE;
+    const items = allArticles.slice(start, start + PAGE_SIZE);
+    const list  = document.getElementById('post-list');
+    list.innerHTML = '';
+    items.forEach(a => list.appendChild(makeItem(a)));
+    renderPagination(page, Math.ceil(allArticles.length / PAGE_SIZE));
+  }
+
+  function makeItem(a) {
+    const isApi = a.source === 'api';
+    const url   = isApi ? `/api/articles/${a.id}` : a.url;
+    const date  = new Date(a.date || a.created_at).toLocaleDateString('vi-VN',
+      { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const cat   = a.category || '';
+
+    const li = document.createElement('li');
+    li.className = 'post-item';
+    li.dataset.id = a.id || '';
+
+    li.innerHTML = `
+      <a href="${url}" class="post-link">
+        <div class="post-meta">
+          <time>${date}</time>
+          ${cat ? `<span class="tag">${cat}</span>` : ''}
+          ${isApi ? `<span class="tag tag-api">API</span>` : ''}
+        </div>
+        <h2 class="post-item-title">${a.title}</h2>
+        ${a.excerpt ? `<p class="post-excerpt">${a.excerpt}</p>` : ''}
+      </a>
+      ${isApi ? `<button class="delete-item-btn" title="Xóa bài này" data-id="${a.id}" data-title="${a.title.replace(/"/g,'&quot;')}">×</button>` : ''}`;
+
+    if (isApi) {
+      li.querySelector('.delete-item-btn').addEventListener('click', e => {
+        e.preventDefault();
+        deleteOne(a.id, a.title);
+      });
+    }
+    return li;
+  }
+
+  function renderPagination(current, total) {
+    const el = document.getElementById('pagination');
+    el.innerHTML = '';
+    if (total <= 1) return;
+
+    const pages = getPageNums(current, total);
+    if (current > 1) el.appendChild(makePageBtn('←', current - 1));
+    pages.forEach(p => {
+      if (p === '…') {
+        const s = document.createElement('span');
+        s.className = 'page-ellipsis'; s.textContent = '…'; el.appendChild(s);
+      } else {
+        const btn = makePageBtn(p, p);
+        if (p === current) btn.classList.add('active');
+        el.appendChild(btn);
+      }
     });
-    list.style.display = '';
-  } catch (_) { /* API chưa cấu hình, bỏ qua */ }
+    if (current < total) el.appendChild(makePageBtn('→', current + 1));
+  }
+
+  function getPageNums(cur, total) {
+    if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+    if (cur <= 4)        return [1, 2, 3, 4, 5, '…', total];
+    if (cur >= total - 3) return [1, '…', total-4, total-3, total-2, total-1, total];
+    return [1, '…', cur-1, cur, cur+1, '…', total];
+  }
+
+  function makePageBtn(label, page) {
+    const btn = document.createElement('button');
+    btn.className = 'page-btn';
+    btn.textContent = label;
+    btn.addEventListener('click', () => {
+      renderPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    return btn;
+  }
+
+  function updateToolbar() {
+    const apiCount = allArticles.filter(a => a.source === 'api').length;
+    const toolbar  = document.getElementById('list-toolbar');
+    if (apiCount === 0) { toolbar.classList.add('hidden'); return; }
+    toolbar.classList.remove('hidden');
+    document.getElementById('toolbar-count').textContent =
+      `${allArticles.length} bài · ${apiCount} từ API`;
+  }
+
+  // ── Delete ──
+  function getKey() {
+    let k = sessionStorage.getItem('lazy_api_key');
+    if (!k) {
+      k = prompt('Nhập API Key:');
+      if (k) sessionStorage.setItem('lazy_api_key', k.trim());
+    }
+    return k;
+  }
+
+  async function deleteOne(id, title) {
+    if (!confirm(`Xóa bài "${title}"?`)) return;
+    const key = getKey(); if (!key) return;
+    const res = await fetch(`/api/articles/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(`Lỗi: ${data.error}`); return; }
+    allArticles = allArticles.filter(a => a.id !== id);
+    const totalPages = Math.ceil(allArticles.length / PAGE_SIZE);
+    renderPage(Math.min(currentPage, totalPages || 1));
+    updateToolbar();
+  }
+
+  document.getElementById('btn-delete-all').addEventListener('click', async () => {
+    const apiCount = allArticles.filter(a => a.source === 'api').length;
+    if (!confirm(`Xóa tất cả ${apiCount} bài từ API? Không thể hoàn tác.`)) return;
+    const key = getKey(); if (!key) return;
+    const res = await fetch('/api/articles', {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${key}` },
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(`Lỗi: ${data.error}`); return; }
+    allArticles = allArticles.filter(a => a.source !== 'api');
+    renderPage(1);
+    updateToolbar();
+  });
 })();
 </script>

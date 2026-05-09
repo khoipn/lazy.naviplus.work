@@ -1,6 +1,6 @@
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
@@ -10,8 +10,9 @@ export async function onRequest(context) {
   if (request.method === 'OPTIONS') {
     return new Response(null, { headers: CORS });
   }
-  if (request.method === 'GET') return handleGet(env);
-  if (request.method === 'POST') return handlePost(request, env);
+  if (request.method === 'GET')    return handleGet(env);
+  if (request.method === 'POST')   return handlePost(request, env);
+  if (request.method === 'DELETE') return handleDeleteAll(request, env);
 
   return jsonRes({ error: 'Method not allowed' }, 405);
 }
@@ -84,6 +85,23 @@ async function handlePost(request, env) {
   await env.ARTICLES_KV.put('index', JSON.stringify(index));
 
   return jsonRes({ id, title: article.title, created_at }, 201);
+}
+
+// ── DELETE /api/articles ── xóa toàn bộ ──────────────────────────
+async function handleDeleteAll(request, env) {
+  const apiKey = env.API_KEY;
+  if (!apiKey || request.headers.get('Authorization') !== `Bearer ${apiKey}`) {
+    return jsonRes({ error: 'Unauthorized.' }, 401);
+  }
+  if (!env.ARTICLES_KV) return jsonRes({ error: 'KV chưa cấu hình.' }, 503);
+
+  const list = await env.ARTICLES_KV.list({ prefix: 'article:' });
+  await Promise.all([
+    ...list.keys.map(k => env.ARTICLES_KV.delete(k.name)),
+    env.ARTICLES_KV.delete('index'),
+  ]);
+
+  return jsonRes({ deleted: list.keys.length });
 }
 
 function jsonRes(data, status = 200) {

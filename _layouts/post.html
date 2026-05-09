@@ -21,6 +21,15 @@ layout: default
     <span id="tts-status" class="tts-status"></span>
   </div>
 
+  <div class="tts-seek-row">
+    <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" />
+    <span id="seek-label" class="seek-label">0 / 0</span>
+  </div>
+  <div id="resume-hint" class="resume-hint hidden">
+    <span id="resume-text"></span>
+    <button id="btn-restart" class="restart-btn">Đọc từ đầu</button>
+  </div>
+
   <div id="post-content" class="post-content">
     {{ content }}
   </div>
@@ -28,125 +37,135 @@ layout: default
 
 <script>
 (function () {
+  const PROGRESS_KEY = 'lazy_tts_' + {{ page.url | jsonify }};
+
   const content   = document.getElementById('post-content');
   const btnPlay   = document.getElementById('btn-play');
   const btnPause  = document.getElementById('btn-pause');
   const btnStop   = document.getElementById('btn-stop');
-  const status    = document.getElementById('tts-status');
+  const statusEl  = document.getElementById('tts-status');
+  const seekBar   = document.getElementById('seek-bar');
+  const seekLabel = document.getElementById('seek-label');
+  const resumeHint= document.getElementById('resume-hint');
+  const resumeText= document.getElementById('resume-text');
+  const btnRestart= document.getElementById('btn-restart');
   const speedBtns = document.querySelectorAll('.speed-btn');
 
-  let rate      = 1.05;
-  let chunks    = [];
-  let index     = 0;
-  let paused    = false;
-  let playing   = false;
-  let viVoice   = null;
+  let rate = 1.05, chunks = [], index = 0, paused = false, playing = false, viVoice = null;
 
-  // ── Voice selection: prefer Google Vietnamese (most natural) ──
+  // ── Voice ──
   function loadVoice() {
-    const voices = speechSynthesis.getVoices();
-    viVoice =
-      voices.find(v => v.name.includes('Google') && v.lang.startsWith('vi')) ||
-      voices.find(v => v.lang === 'vi-VN') ||
-      voices.find(v => v.lang.startsWith('vi')) ||
-      null;
+    const v = speechSynthesis.getVoices();
+    viVoice = v.find(x => x.name.includes('Google') && x.lang.startsWith('vi'))
+           || v.find(x => x.lang === 'vi-VN') || v.find(x => x.lang.startsWith('vi')) || null;
   }
   loadVoice();
   speechSynthesis.addEventListener('voiceschanged', loadVoice);
 
-  // ── Split content into readable paragraphs ──
+  // ── Chunks ──
   function buildChunks() {
     const nodes = content.querySelectorAll('p, h2, h3, li, blockquote');
-    if (nodes.length === 0) {
-      return [{ el: content, text: cleanText(content.innerText) }];
-    }
-    return Array.from(nodes)
-      .map(el => ({ el, text: cleanText(el.innerText) }))
-      .filter(c => c.text.length > 0);
+    const src   = nodes.length ? Array.from(nodes) : [content];
+    return src.map(el => ({ el, text: el.innerText.replace(/\s+/g,' ').trim() }))
+              .filter(c => c.text.length > 0);
   }
 
-  function cleanText(t) {
-    return t
-      .replace(/\s+/g, ' ')
-      .replace(/[#*_`]/g, '')
-      .trim();
+  // ── Progress ──
+  function saveProgress(i) { localStorage.setItem(PROGRESS_KEY, i); }
+  function loadProgress()  { const v = localStorage.getItem(PROGRESS_KEY); return v !== null ? parseInt(v) : 0; }
+  function clearProgress() { localStorage.removeItem(PROGRESS_KEY); }
+
+  function updateSeek(i) {
+    seekBar.value   = i;
+    seekLabel.textContent = chunks.length ? `${i + 1} / ${chunks.length}` : '0 / 0';
   }
 
-  // ── Highlight current paragraph ──
+  // ── Highlight ──
   function highlight(el) {
     content.querySelectorAll('.reading').forEach(e => e.classList.remove('reading'));
-    if (el) {
-      el.classList.add('reading');
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    }
+    if (el) { el.classList.add('reading'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
   }
 
-  // ── Speak one chunk, then advance ──
+  // ── Speak ──
   function speakChunk(i) {
     if (i >= chunks.length) { onDone(); return; }
-
     const { el, text } = chunks[i];
     highlight(el);
+    updateSeek(i);
+    saveProgress(i);
 
     const u = new SpeechSynthesisUtterance(text);
-    u.lang  = 'vi-VN';
-    u.rate  = rate;
-    u.pitch = 1.0;
+    u.lang = 'vi-VN'; u.rate = rate; u.pitch = 1.0;
     if (viVoice) u.voice = viVoice;
-
     u.onend   = () => { if (playing && !paused) speakChunk(i + 1); };
-    u.onerror = (e) => { if (e.error !== 'interrupted') speakChunk(i + 1); };
-
+    u.onerror = e => { if (e.error !== 'interrupted') speakChunk(i + 1); };
     index = i;
     speechSynthesis.speak(u);
   }
 
-  function onDone() {
-    playing = false;
-    paused  = false;
-    highlight(null);
-    status.textContent   = '';
-    btnPlay.disabled     = false;
-    btnPause.disabled    = true;
-    btnStop.disabled     = true;
-    btnPause.textContent = '⏸ Dừng';
+  function startFrom(i) {
+    speechSynthesis.cancel();
+    paused = false; playing = true;
+    btnPlay.disabled = true; btnPause.disabled = false; btnStop.disabled = false;
+    statusEl.textContent = '▶ Đang đọc…';
+    resumeHint.classList.add('hidden');
+    speakChunk(i);
   }
 
-  function setPlaying() {
-    playing = true;
-    btnPlay.disabled  = true;
-    btnPause.disabled = false;
-    btnStop.disabled  = false;
-    status.textContent = '▶ Đang đọc…';
+  function onDone() {
+    playing = paused = false; highlight(null);
+    clearProgress();
+    statusEl.textContent = ''; btnPlay.disabled = false;
+    btnPause.disabled = true; btnStop.disabled = true;
+    btnPause.textContent = '⏸ Dừng';
+    updateSeek(0);
+  }
+
+  // ── Init: check saved progress ──
+  chunks = buildChunks();
+  seekBar.max = Math.max(0, chunks.length - 1);
+  const saved = loadProgress();
+  if (saved > 0 && saved < chunks.length) {
+    updateSeek(saved);
+    resumeText.textContent = `Lần trước đọc đến đoạn ${saved + 1} / ${chunks.length}`;
+    resumeHint.classList.remove('hidden');
+  } else {
+    updateSeek(0);
   }
 
   // ── Controls ──
   btnPlay.addEventListener('click', () => {
-    speechSynthesis.cancel();
-    paused = false;
     chunks = buildChunks();
-    setPlaying();
-    speakChunk(0);
+    seekBar.max = Math.max(0, chunks.length - 1);
+    startFrom(parseInt(seekBar.value) || 0);
   });
 
   btnPause.addEventListener('click', () => {
     if (!paused) {
-      speechSynthesis.pause();
-      paused = true;
-      status.textContent   = '⏸ Tạm dừng';
-      btnPause.textContent = '▶ Tiếp';
+      speechSynthesis.pause(); paused = true;
+      statusEl.textContent = '⏸ Tạm dừng'; btnPause.textContent = '▶ Tiếp';
     } else {
-      speechSynthesis.resume();
-      paused = false;
-      status.textContent   = '▶ Đang đọc…';
-      btnPause.textContent = '⏸ Dừng';
+      speechSynthesis.resume(); paused = false;
+      statusEl.textContent = '▶ Đang đọc…'; btnPause.textContent = '⏸ Dừng';
     }
   });
 
   btnStop.addEventListener('click', () => {
-    playing = false;
-    speechSynthesis.cancel();
-    onDone();
+    playing = false; speechSynthesis.cancel(); onDone();
+  });
+
+  btnRestart.addEventListener('click', () => {
+    clearProgress();
+    updateSeek(0);
+    resumeHint.classList.add('hidden');
+    startFrom(0);
+  });
+
+  // ── Seek ──
+  seekBar.addEventListener('input', () => {
+    const i = parseInt(seekBar.value);
+    if (chunks.length) seekLabel.textContent = `${i + 1} / ${chunks.length}`;
+    if (playing && !paused) { speechSynthesis.cancel(); speakChunk(i); }
   });
 
   speedBtns.forEach(btn => {
