@@ -8,52 +8,54 @@ layout: default
     <time class="post-date">{{ page.date | date: "%d/%m/%Y" }}</time>
   </div>
 
-  <div class="tts-bar">
-    <button id="btn-play" class="tts-btn tts-play">▶ Phát</button>
+  <div id="post-content" class="post-content">
+    {{ content }}
+  </div>
+</article>
+
+<div class="tts-container">
+  <div class="tts-main">
+    <button id="btn-play"  class="tts-btn tts-play">▶ Phát</button>
     <button id="btn-pause" class="tts-btn tts-pause" disabled>⏸ Dừng</button>
-    <button id="btn-stop" class="tts-btn tts-stop" disabled>⏹ Tắt</button>
+    <button id="btn-stop"  class="tts-btn tts-stop"  disabled>⏹ Tắt</button>
+    <span id="tts-status" class="tts-status"></span>
+  </div>
+  <div class="tts-seek-row">
+    <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" />
+    <span id="seek-label" class="seek-label">0 / 0</span>
+  </div>
+  <div class="tts-bottom">
     <div class="tts-speed">
       <button class="speed-btn" data-rate="0.9">0.9×</button>
       <button class="speed-btn active" data-rate="1.05">1.0×</button>
       <button class="speed-btn" data-rate="1.25">1.25×</button>
       <button class="speed-btn" data-rate="1.5">1.5×</button>
     </div>
-    <span id="tts-status" class="tts-status"></span>
+    <div id="resume-hint" class="resume-hint hidden">
+      <span id="resume-text"></span>
+      <button id="btn-restart" class="restart-btn">Đọc từ đầu</button>
+    </div>
   </div>
-
-  <div class="tts-seek-row">
-    <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" />
-    <span id="seek-label" class="seek-label">0 / 0</span>
-  </div>
-  <div id="resume-hint" class="resume-hint hidden">
-    <span id="resume-text"></span>
-    <button id="btn-restart" class="restart-btn">Đọc từ đầu</button>
-  </div>
-
-  <div id="post-content" class="post-content">
-    {{ content }}
-  </div>
-</article>
+</div>
 
 <script>
 (function () {
   const PROGRESS_KEY = 'lazy_tts_' + {{ page.url | jsonify }};
 
-  const content   = document.getElementById('post-content');
-  const btnPlay   = document.getElementById('btn-play');
-  const btnPause  = document.getElementById('btn-pause');
-  const btnStop   = document.getElementById('btn-stop');
-  const statusEl  = document.getElementById('tts-status');
-  const seekBar   = document.getElementById('seek-bar');
-  const seekLabel = document.getElementById('seek-label');
-  const resumeHint= document.getElementById('resume-hint');
-  const resumeText= document.getElementById('resume-text');
-  const btnRestart= document.getElementById('btn-restart');
-  const speedBtns = document.querySelectorAll('.speed-btn');
+  const content    = document.getElementById('post-content');
+  const btnPlay    = document.getElementById('btn-play');
+  const btnPause   = document.getElementById('btn-pause');
+  const btnStop    = document.getElementById('btn-stop');
+  const statusEl   = document.getElementById('tts-status');
+  const seekBar    = document.getElementById('seek-bar');
+  const seekLabel  = document.getElementById('seek-label');
+  const resumeHint = document.getElementById('resume-hint');
+  const resumeText = document.getElementById('resume-text');
+  const btnRestart = document.getElementById('btn-restart');
+  const speedBtns  = document.querySelectorAll('.speed-btn');
 
   let rate = 1.05, chunks = [], index = 0, paused = false, playing = false, viVoice = null;
 
-  // ── Voice ──
   function loadVoice() {
     const v = speechSynthesis.getVoices();
     viVoice = v.find(x => x.name.includes('Google') && x.lang.startsWith('vi'))
@@ -61,8 +63,8 @@ layout: default
   }
   loadVoice();
   speechSynthesis.addEventListener('voiceschanged', loadVoice);
+  window.addEventListener('pagehide', () => speechSynthesis.cancel());
 
-  // ── Chunks ──
   function buildChunks() {
     const nodes = content.querySelectorAll('p, h2, h3, li, blockquote');
     const src   = nodes.length ? Array.from(nodes) : [content];
@@ -70,30 +72,24 @@ layout: default
               .filter(c => c.text.length > 0);
   }
 
-  // ── Progress ──
   function saveProgress(i) { localStorage.setItem(PROGRESS_KEY, JSON.stringify({ chunk: i, total: chunks.length })); }
   function loadProgress()  { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)); } catch { return null; } }
   function clearProgress() { localStorage.removeItem(PROGRESS_KEY); }
 
   function updateSeek(i) {
-    seekBar.value   = i;
+    seekBar.value = i;
     seekLabel.textContent = chunks.length ? `${i + 1} / ${chunks.length}` : '0 / 0';
   }
 
-  // ── Highlight ──
   function highlight(el) {
     content.querySelectorAll('.reading').forEach(e => e.classList.remove('reading'));
     if (el) { el.classList.add('reading'); el.scrollIntoView({ behavior:'smooth', block:'nearest' }); }
   }
 
-  // ── Speak ──
   function speakChunk(i) {
     if (i >= chunks.length) { onDone(); return; }
     const { el, text } = chunks[i];
-    highlight(el);
-    updateSeek(i);
-    saveProgress(i);
-
+    highlight(el); updateSeek(i); saveProgress(i);
     const u = new SpeechSynthesisUtterance(text);
     u.lang = 'vi-VN'; u.rate = rate; u.pitch = 1.0;
     if (viVoice) u.voice = viVoice;
@@ -104,72 +100,46 @@ layout: default
   }
 
   function startFrom(i) {
-    speechSynthesis.cancel();
-    paused = false; playing = true;
+    speechSynthesis.cancel(); paused = false; playing = true;
     btnPlay.disabled = true; btnPause.disabled = false; btnStop.disabled = false;
-    statusEl.textContent = '▶ Đang đọc…';
+    statusEl.textContent = 'Đang đọc…';
     resumeHint.classList.add('hidden');
     speakChunk(i);
   }
 
   function onDone() {
-    playing = paused = false; highlight(null);
-    clearProgress();
+    playing = paused = false; highlight(null); clearProgress();
     statusEl.textContent = ''; btnPlay.disabled = false;
     btnPause.disabled = true; btnStop.disabled = true;
-    btnPause.textContent = '⏸ Dừng';
-    updateSeek(0);
+    btnPause.textContent = '⏸ Dừng'; updateSeek(0);
   }
 
-  // ── Stop audio khi rời trang ──
-  window.addEventListener('pagehide', () => speechSynthesis.cancel());
-
-  // ── Init: check saved progress ──
   chunks = buildChunks();
   seekBar.max = Math.max(0, chunks.length - 1);
   const saved = loadProgress();
   if (saved && saved.chunk > 0 && saved.chunk < chunks.length) {
     updateSeek(saved.chunk);
-    resumeText.textContent = `Lần trước đọc đến đoạn ${saved.chunk + 1} / ${chunks.length}`;
+    resumeText.textContent = `Đọc tiếp đoạn ${saved.chunk + 1} / ${chunks.length}`;
     resumeHint.classList.remove('hidden');
   } else {
     updateSeek(0);
   }
 
-  // ── Controls ──
   btnPlay.addEventListener('click', () => {
     if (!chunks.length) { chunks = buildChunks(); seekBar.max = Math.max(0, chunks.length - 1); }
     startFrom(parseInt(seekBar.value) || 0);
   });
-
   btnPause.addEventListener('click', () => {
-    if (!paused) {
-      speechSynthesis.pause(); paused = true;
-      statusEl.textContent = '⏸ Tạm dừng'; btnPause.textContent = '▶ Tiếp';
-    } else {
-      speechSynthesis.resume(); paused = false;
-      statusEl.textContent = '▶ Đang đọc…'; btnPause.textContent = '⏸ Dừng';
-    }
+    if (!paused) { speechSynthesis.pause(); paused = true; statusEl.textContent = 'Tạm dừng'; btnPause.textContent = '▶ Tiếp'; }
+    else { speechSynthesis.resume(); paused = false; statusEl.textContent = 'Đang đọc…'; btnPause.textContent = '⏸ Dừng'; }
   });
-
-  btnStop.addEventListener('click', () => {
-    playing = false; speechSynthesis.cancel(); onDone();
-  });
-
-  btnRestart.addEventListener('click', () => {
-    clearProgress();
-    updateSeek(0);
-    resumeHint.classList.add('hidden');
-    startFrom(0);
-  });
-
-  // ── Seek ──
+  btnStop.addEventListener('click', () => { playing = false; speechSynthesis.cancel(); onDone(); });
+  btnRestart.addEventListener('click', () => { clearProgress(); updateSeek(0); resumeHint.classList.add('hidden'); startFrom(0); });
   seekBar.addEventListener('input', () => {
     const i = parseInt(seekBar.value);
     if (chunks.length) seekLabel.textContent = `${i + 1} / ${chunks.length}`;
     if (playing && !paused) { speechSynthesis.cancel(); speakChunk(i); }
   });
-
   speedBtns.forEach(btn => {
     btn.addEventListener('click', () => {
       rate = parseFloat(btn.dataset.rate);
