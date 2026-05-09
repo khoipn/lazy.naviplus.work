@@ -12,6 +12,7 @@ plugins:
 
 exclude:
   - functions/
+  - docs/
   - Gemfile
   - Gemfile.lock
   - .dev.vars
